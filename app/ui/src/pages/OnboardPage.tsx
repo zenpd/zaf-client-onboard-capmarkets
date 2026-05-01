@@ -5,7 +5,7 @@ import { useClientStore, JourneyType } from '../store/clientStore'
 import { Send, Loader2, UserPlus, Users, Building2, Landmark } from 'lucide-react'
 import clsx from 'clsx'
 
-const JOURNEYS: { type: JourneyType; label: string; desc: string; icon: React.FC<{size?: number}> }[] = [
+const JOURNEYS: { type: JourneyType; label: string; desc: string; icon: React.ElementType }[] = [
   { type: 'individual', label: 'Individual',  desc: 'Retail, HNW, UHNW clients',        icon: UserPlus },
   { type: 'joint',      label: 'Joint',       desc: 'Two or more named account holders', icon: Users },
   { type: 'corporate',  label: 'Corporate',   desc: 'Legal entities, UBO verification', icon: Building2 },

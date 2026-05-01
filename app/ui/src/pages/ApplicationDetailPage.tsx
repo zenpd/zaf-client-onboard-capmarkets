@@ -35,14 +35,14 @@ export default function ApplicationDetailPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {[
+        {([
           ['Session ID',    data.session_id],
           ['Journey Type',  data.journey_type],
           ['Client Type',   data.client_type],
           ['Current Step',  data.current_step],
           ['Risk Band',     (data.risk_score as Record<string,string>)?.risk_band || '—'],
           ['Account No.',   data.account_number || '—'],
-        ].map(([label, value]) => (
+        ] as [string, unknown][]).map(([label, value]) => (
           <div key={String(label)} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
             <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</p>
             <p className="text-base font-semibold text-gray-900 mt-1 capitalize">{String(value)}</p>

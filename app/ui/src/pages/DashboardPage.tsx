@@ -58,7 +58,7 @@ export default function DashboardPage() {
 
       {/* Second row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatsCard title="Active Today" value={String(s.active_today ?? '—')} color="blue" />
+        <StatsCard title="Active Today" value={String(s.active_today ?? '—')} color="navy" />
         <StatsCard title="Completed Today" value={String(s.completed_today ?? '—')} color="green" />
         <StatsCard title="EDD Cases Open" value={String(s.edd_cases_open ?? '—')} color="gold" />
         <StatsCard title="Sanctions Holds" value={String(s.sanctions_holds ?? '—')} color="red" />
