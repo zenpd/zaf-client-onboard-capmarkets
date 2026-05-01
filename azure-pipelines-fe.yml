@@ -80,6 +80,7 @@ stages:
               set -e
 
               BACKEND_FQDN=$(az containerapp show -n capmarkets-onboard-be -g $(resourceGroup) --query 'properties.configuration.ingress.fqdn' -o tsv 2>/dev/null || echo 'localhost:8002')
+              ACR_PWD=$(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
 
               if az containerapp show -n "$(frontendAppName)" -g "$(resourceGroup)" &>/dev/null; then
                 echo "Updating existing Frontend Container App..."
@@ -101,6 +102,8 @@ stages:
                   --min-replicas 1 \
                   --max-replicas 3 \
                   --registry-server "$(acrLoginServer)" \
+                  --registry-username "$(acrName)" \
+                  --registry-password "$ACR_PWD" \
                   --env-vars \
                     "VITE_API_URL=https://$BACKEND_FQDN/api/v1"
               fi
