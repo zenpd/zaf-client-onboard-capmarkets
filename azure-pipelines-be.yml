@@ -49,6 +49,8 @@ stages:
                 -f app/Dockerfile app/
               docker push "$(imageName)"
               docker push "$(acrLoginServer)/$(backendRepo):$(Build.BuildId)"
+              # Export ACR creds for deploy stages
+              echo "##vso[task.setvariable variable=ACR_PASSWORD;issecret=true]$ACR_PWD"
 
 # ================= DEPLOY BACKEND =================
 - stage: Deploy
@@ -72,7 +74,8 @@ stages:
             inlineScript: |
               set -e
 
-              TEMPORAL_HOST="$(az containerapp show -n merchant-temporal-be -g $(resourceGroup) --query 'properties.configuration.ingress.fqdn' -o tsv 2>/dev/null || echo '')":443
+              TEMPORAL_HOST="temporal-be.internal.bravesky-d9f9eeb7.eastus2.azurecontainerapps.io:80"
+              ACR_PWD=$(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
 
               if az containerapp show -n "$(backendAppName)" -g "$(resourceGroup)" &>/dev/null; then
                 echo "Updating existing Backend Container App..."
@@ -99,6 +102,8 @@ stages:
                   --min-replicas 1 \
                   --max-replicas 3 \
                   --registry-server "$(acrLoginServer)" \
+                  --registry-username "$(acrName)" \
+                  --registry-password "$ACR_PWD" \
                   --env-vars \
                     "APP_ENV=production" \
                     "LOG_LEVEL=INFO" \
@@ -119,7 +124,8 @@ stages:
             inlineScript: |
               set -e
 
-              TEMPORAL_HOST="$(az containerapp show -n merchant-temporal-be -g $(resourceGroup) --query 'properties.configuration.ingress.fqdn' -o tsv 2>/dev/null || echo '')":443
+              TEMPORAL_HOST="temporal-be.internal.bravesky-d9f9eeb7.eastus2.azurecontainerapps.io:80"
+              ACR_PWD=$(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
 
               if az containerapp show -n "$(workerAppName)" -g "$(resourceGroup)" &>/dev/null; then
                 echo "Updating existing Worker Container App..."
@@ -144,6 +150,8 @@ stages:
                   --min-replicas 1 \
                   --max-replicas 3 \
                   --registry-server "$(acrLoginServer)" \
+                  --registry-username "$(acrName)" \
+                  --registry-password "$ACR_PWD" \
                   --command "python" "-m" "workers.temporal_worker" \
                   --env-vars \
                     "APP_ENV=production" \
