@@ -1,0 +1,108 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - app/ui/**
+      - azure-pipelines-fe.yml
+      - app/ui/Dockerfile
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - app/ui/**
+      - azure-pipelines-fe.yml
+      - app/ui/Dockerfile
+
+variables:
+  acrLoginServer: 'zafacr-gqfyc3h8eya2djey.azurecr.io'
+  acrName: 'zafacr'
+  resourceGroup: 'Zenlabs-Agent-Foundry'
+  frontendAppName: 'capmarkets-onboard-fe'
+  frontendRepo: 'capmarkets-onboard-fe'
+  tag: 'latest'
+  imageName: '$(acrLoginServer)/$(frontendRepo):$(tag)'
+
+stages:
+
+# ================= BUILD =================
+- stage: Build
+  displayName: Build & Push Frontend Image
+  jobs:
+    - job: BuildFrontendImage
+      displayName: Build Docker image and push to ACR
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          displayName: Build and push image to ACR
+          inputs:
+            azureSubscription: 'zenlabs-agent-foundry-connection'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              set -e
+              ACR_PWD=$(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
+              docker login $(acrLoginServer) --username $(acrName) --password "$ACR_PWD"
+              docker build \
+                -t "$(imageName)" \
+                -t "$(acrLoginServer)/$(frontendRepo):$(Build.BuildId)" \
+                -f app/ui/Dockerfile app/ui/
+              docker push "$(imageName)"
+              docker push "$(acrLoginServer)/$(frontendRepo):$(Build.BuildId)"
+
+# ================= DEPLOY =================
+- stage: Deploy
+  displayName: Deploy Frontend to Azure Container Apps
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    - job: DeployToACA
+      displayName: Deploy to Container Apps
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          displayName: Deploy Frontend Container App
+          inputs:
+            azureSubscription: 'zenlabs-agent-foundry-connection'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              set -e
+
+              BACKEND_FQDN=$(az containerapp show -n capmarkets-onboard-be -g $(resourceGroup) --query 'properties.configuration.ingress.fqdn' -o tsv 2>/dev/null || echo 'localhost:8002')
+
+              if az containerapp show -n "$(frontendAppName)" -g "$(resourceGroup)" &>/dev/null; then
+                echo "Updating existing Frontend Container App..."
+                az containerapp update \
+                  --name "$(frontendAppName)" \
+                  --resource-group "$(resourceGroup)" \
+                  --image "$(imageName)"
+              else
+                echo "Creating new Frontend Container App..."
+                az containerapp create \
+                  --name "$(frontendAppName)" \
+                  --resource-group "$(resourceGroup)" \
+                  --environment "zaf-aca-pvt-env" \
+                  --image "$(imageName)" \
+                  --cpu 0.5 \
+                  --memory 1Gi \
+                  --ingress external \
+                  --target-port 80 \
+                  --min-replicas 1 \
+                  --max-replicas 3 \
+                  --registry-server "$(acrLoginServer)" \
+                  --env-vars \
+                    "VITE_API_URL=https://$BACKEND_FQDN/api/v1"
+              fi
+
+              echo "Frontend deployment completed"

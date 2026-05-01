@@ -1,0 +1,157 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - app/**
+      - azure-pipelines-be.yml
+      - app/Dockerfile
+    exclude:
+      - app/ui/**
+
+variables:
+  acrLoginServer: 'zafacr-gqfyc3h8eya2djey.azurecr.io'
+  acrName: 'zafacr'
+  resourceGroup: 'Zenlabs-Agent-Foundry'
+  backendAppName: 'capmarkets-onboard-be'
+  workerAppName: 'capmarkets-onboard-worker'
+  backendRepo: 'capmarkets-onboard-be'
+  tag: 'latest'
+  imageName: '$(acrLoginServer)/$(backendRepo):$(tag)'
+
+stages:
+
+# ================= BUILD =================
+- stage: Build
+  displayName: Build & Push Backend Image
+  jobs:
+    - job: BuildBackendImage
+      displayName: Build Docker image and push to ACR
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          displayName: Build and push image to ACR
+          inputs:
+            azureSubscription: 'zenlabs-agent-foundry-connection'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              set -e
+              ACR_PWD=$(az acr credential show --name $(acrName) --query "passwords[0].value" -o tsv)
+              docker login $(acrLoginServer) --username $(acrName) --password "$ACR_PWD"
+              docker build \
+                -t "$(imageName)" \
+                -t "$(acrLoginServer)/$(backendRepo):$(Build.BuildId)" \
+                -f app/Dockerfile app/
+              docker push "$(imageName)"
+              docker push "$(acrLoginServer)/$(backendRepo):$(Build.BuildId)"
+
+# ================= DEPLOY BACKEND =================
+- stage: Deploy
+  displayName: Deploy Backend + Worker to Azure Container Apps
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    - job: DeployToACA
+      displayName: Deploy to Container Apps
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          displayName: Deploy Backend Container App
+          inputs:
+            azureSubscription: 'zenlabs-agent-foundry-connection'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              set -e
+
+              TEMPORAL_HOST="$(az containerapp show -n merchant-temporal-be -g $(resourceGroup) --query 'properties.configuration.ingress.fqdn' -o tsv 2>/dev/null || echo '')":443
+
+              if az containerapp show -n "$(backendAppName)" -g "$(resourceGroup)" &>/dev/null; then
+                echo "Updating existing Backend Container App..."
+                az containerapp update \
+                  --name "$(backendAppName)" \
+                  --resource-group "$(resourceGroup)" \
+                  --image "$(imageName)" \
+                  --set-env-vars \
+                    "TEMPORAL_NAMESPACE=capmarkets-onboarding" \
+                    "TEMPORAL_HOST=$TEMPORAL_HOST" \
+                    "PHOENIX_COLLECTOR_ENDPOINT=https://zaf-phoenix.bravesky-d9f9eeb7.eastus2.azurecontainerapps.io" \
+                    "PHOENIX_PROJECT_NAME=capmarkets-onboarding"
+              else
+                echo "Creating new Backend Container App..."
+                az containerapp create \
+                  --name "$(backendAppName)" \
+                  --resource-group "$(resourceGroup)" \
+                  --environment "zaf-aca-pvt-env" \
+                  --image "$(imageName)" \
+                  --cpu 1 \
+                  --memory 2Gi \
+                  --ingress internal \
+                  --target-port 8002 \
+                  --min-replicas 1 \
+                  --max-replicas 3 \
+                  --registry-server "$(acrLoginServer)" \
+                  --env-vars \
+                    "APP_ENV=production" \
+                    "LOG_LEVEL=INFO" \
+                    "TEMPORAL_NAMESPACE=capmarkets-onboarding" \
+                    "TEMPORAL_HOST=$TEMPORAL_HOST" \
+                    "PHOENIX_COLLECTOR_ENDPOINT=https://zaf-phoenix.bravesky-d9f9eeb7.eastus2.azurecontainerapps.io" \
+                    "PHOENIX_PROJECT_NAME=capmarkets-onboarding"
+              fi
+
+              echo "Backend deployment completed"
+
+        - task: AzureCLI@2
+          displayName: Deploy Temporal Worker Container App
+          inputs:
+            azureSubscription: 'zenlabs-agent-foundry-connection'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              set -e
+
+              TEMPORAL_HOST="$(az containerapp show -n merchant-temporal-be -g $(resourceGroup) --query 'properties.configuration.ingress.fqdn' -o tsv 2>/dev/null || echo '')":443
+
+              if az containerapp show -n "$(workerAppName)" -g "$(resourceGroup)" &>/dev/null; then
+                echo "Updating existing Worker Container App..."
+                az containerapp update \
+                  --name "$(workerAppName)" \
+                  --resource-group "$(resourceGroup)" \
+                  --image "$(imageName)" \
+                  --set-env-vars \
+                    "TEMPORAL_NAMESPACE=capmarkets-onboarding" \
+                    "TEMPORAL_HOST=$TEMPORAL_HOST" \
+                    "PHOENIX_COLLECTOR_ENDPOINT=https://zaf-phoenix.bravesky-d9f9eeb7.eastus2.azurecontainerapps.io" \
+                    "PHOENIX_PROJECT_NAME=capmarkets-onboarding"
+              else
+                echo "Creating new Worker Container App..."
+                az containerapp create \
+                  --name "$(workerAppName)" \
+                  --resource-group "$(resourceGroup)" \
+                  --environment "zaf-aca-pvt-env" \
+                  --image "$(imageName)" \
+                  --cpu 1 \
+                  --memory 2Gi \
+                  --min-replicas 1 \
+                  --max-replicas 3 \
+                  --registry-server "$(acrLoginServer)" \
+                  --command "python" "-m" "workers.temporal_worker" \
+                  --env-vars \
+                    "APP_ENV=production" \
+                    "LOG_LEVEL=INFO" \
+                    "TEMPORAL_NAMESPACE=capmarkets-onboarding" \
+                    "TEMPORAL_HOST=$TEMPORAL_HOST" \
+                    "PHOENIX_COLLECTOR_ENDPOINT=https://zaf-phoenix.bravesky-d9f9eeb7.eastus2.azurecontainerapps.io" \
+                    "PHOENIX_PROJECT_NAME=capmarkets-onboarding"
+              fi
+
+              echo "Worker deployment completed"
