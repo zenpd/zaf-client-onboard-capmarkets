@@ -153,7 +153,7 @@ stages:
                   --registry-username "$(acrName)" \
                   --registry-password "$ACR_PWD" \
                   --command "python" \
-                  --args "-m" "workers.temporal_worker" \
+                  --args "-m workers.temporal_worker" \
                   --env-vars \
                     "APP_ENV=production" \
                     "LOG_LEVEL=INFO" \
