@@ -51,7 +51,7 @@ export default function ApplicationDetailPage() {
       </div>
 
       {/* Completed Steps */}
-      {(data.completed_steps as string[])?.length > 0 && (
+      {Array.isArray(data.completed_steps) && data.completed_steps.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
           <h2 className="font-semibold text-gray-800 mb-3">Completed Steps</h2>
           <div className="flex flex-wrap gap-2">
@@ -63,7 +63,7 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* AI Review Outputs */}
-      {data.llm_case_summary && (
+      {data.llm_case_summary != null && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
           <h2 className="font-semibold text-gray-800 mb-3">AI Case Summary</h2>
           <p className="text-sm text-gray-700 leading-relaxed">{String(data.llm_case_summary)}</p>
@@ -71,7 +71,7 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* Audit Trail */}
-      {(data.audit_trail as unknown[])?.length > 0 && (
+      {Array.isArray(data.audit_trail) && data.audit_trail.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
           <h2 className="font-semibold text-gray-800 mb-3">Audit Trail</h2>
           <div className="space-y-2">
