@@ -3,6 +3,7 @@ import AppShell from './components/layout/AppShell'
 import DashboardPage from './pages/DashboardPage'
 import OnboardPage from './pages/OnboardPage'
 import CompliancePage from './pages/CompliancePage'
+import ApplicationsPage from './pages/ApplicationsPage'
 import ApplicationDetailPage from './pages/ApplicationDetailPage'
 import AuditTrailPage from './pages/AuditTrailPage'
 import AgentsPage from './pages/AgentsPage'
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="dashboard"                element={<DashboardPage />} />
           <Route path="onboard"                  element={<OnboardPage />} />
           <Route path="compliance"               element={<CompliancePage />} />
+          <Route path="applications"             element={<ApplicationsPage />} />
           <Route path="applications/:sessionId"  element={<ApplicationDetailPage />} />
           <Route path="audit"                    element={<AuditTrailPage />} />
           <Route path="agents"                   element={<AgentsPage />} />
@@ -26,3 +28,4 @@ export default function App() {
     </BrowserRouter>
   )
 }
+
